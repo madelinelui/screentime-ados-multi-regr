@@ -1,0 +1,144 @@
+---
+title: "multiple regression"
+author: '2610922'
+date: "2/18/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r t1}
+library(pwr)
+library(see)
+library(performance)
+library(report)
+library(tidyverse)
+pinfo <- read_csv("participant_info.csv")
+wellbeing <- read_csv("wellbeing.csv")
+screen <- read_csv("screen_time.csv")
+```
+
+```{r t2}
+summary(is.na(pinfo))
+summary(is.na(wellbeing))
+summary(is.na(screen))
+```
+
+```{r t3}
+wemwbs <- wellbeing %>%
+  pivot_longer(names_to="var", values_to="score", -Serial) %>%
+  group_by(Serial) %>%
+  summarise(tot_wellbeing = sum(score))
+# sanity check
+summarise(wemwbs, mean(tot_wellbeing),
+          sd(tot_wellbeing),
+          min(tot_wellbeing),
+          max(tot_wellbeing))
+
+ggplot(wemwbs, aes(x=tot_wellbeing))+
+  geom_histogram(colour="white", binwidth=3)
+```
+
+```{r t4}
+screen_long <- screen %>%
+  pivot_longer(names_to="var", values_to="hours", -Serial)%>%
+  separate(var, c("variable", "day"), "_")
+screen2 <- screen_long %>%
+  mutate(variable=dplyr::recode(variable,
+                                "Watch"="Watching TV",
+                                "Comp"="Playing Video Games",
+                                "Comph" = "Using Computers",
+                                "Smart" = "Using Smartphone"),
+         day = dplyr::recode(day,
+                             "wk"="Weekday",
+                             "we"="Weekend"))
+dat_means <- inner_join(wemwbs, screen2, "Serial") %>%
+  group_by(variable, day, hours) %>%
+  summarise(mean_wellbeing=mean(tot_wellbeing))
+
+ggplot(dat_means, aes(x=hours, y=mean_wellbeing, linetype=day))+
+  geom_line()+
+  geom_point()+
+  facet_wrap(~variable, nrow=2)
+```
+
+```{r t5}
+smarttot <- screen2 %>%
+  filter(variable=="Using Smartphone") %>%
+  group_by(Serial) %>%
+  summarise(tothours=sum(hours))
+
+smart_wb <- smarttot %>%
+  filter(tothours>1)%>%
+  inner_join(wemwbs, by=c("Serial"))%>%
+  inner_join(pinfo, by=c("Serial"))
+```
+
+```{r t6}
+smart_wb <- smarttot %>%
+  filter(tothours>1)%>%
+  inner_join(wemwbs, by=c("Serial"))%>%
+  inner_join(pinfo, by=c("Serial")) %>%
+  mutate(thours_c= tothours - mean(tothours),
+  male_c=ifelse(male==1, .5, -.5),
+  male_c=as.factor(male_c),
+  male=as.factor(male))
+```
+
+```{r t7}
+smart_rel <- smart_wb %>%
+  group_by(male, tothours) %>%
+  summarise(mean_wellbeing=mean(tot_wellbeing))
+  
+ggplot(smart_rel, aes(x=tothours, y=mean_wellbeing, color=male))+
+  geom_point()+
+  geom_smooth(method=lm)+
+  scale_color_discrete(name="Gender", labels=c("Female", "Male"))+
+  scale_x_continuous(name="Total hours smartphone use")+
+  scale_y_continuous(name="Mean well-being score")
+```
+
+```{r t8}
+mod<- lm(tot_wellbeing ~ male_c * thours_c, smart_wb)
+mod_summary <- summary(mod)
+mod_summary
+```
+
+```{r t9}
+assumptions <- check_model(mod, check = c("vif", "qq", "normality", "linearity", "homogeneity"))
+assumptions
+
+check_normality(mod)
+
+ggplot(assumptions$HOMOGENEITY, aes(x, y)) +
+    geom_point2() +
+    stat_smooth(
+      method = "loess",
+      se = FALSE,
+      formula = y ~ x,
+    ) +
+    labs(
+      title = "Homogeneity of Variance",
+      subtitle = "Reference line should be flat and horizontal",
+      y = expression(sqrt("|Std. residuals|")),
+      x = "Fitted values"
+    ) 
+
+check_homogeneity(mod)
+
+check_collinearity(mod)
+```
+
+```{r t10}
+pwr.f2.test(u = 3, v = 71029, f2 = NULL, sig.level = .05, power = .99)
+f2 <- mod_summary$adj.r.squared/(1 - mod_summary$adj.r.squared)
+```
+
+```{r t11}
+newdata <- tibble(male_c="-0.5", thours_c=4)
+
+predict(mod, newdata)
+```
+All continuous predictors were mean-centered and deviation coding was used for categorical predictors. The results of the regression indicated that the model significantly predicted course engagement (F(`r mod_summary$fstatistic[2]`, `r mod_summary$fstatistic[3] %>% round(2)`) = `r mod_summary$fstatistic[1] %>% round(2)`, p < .001, Adjusted R2 = `r mod_summary$adj.r.squared %>% round(2)`, f^2^ = .63), accounting for `r (mod_summary$adj.r.squared %>% round(2))*100`% of the variance. Total screen time was a significant negative predictor of wellbeing scores (β = `r mod$coefficients[2] %>% round(2)`, p < .001, as was gender (β = `r mod$coefficients[3] %>% round(2)`, p < .001, with girls having lower wellbeing scores than boys. Importantly, there was a significant interaction between screentime and gender (β = `r mod$coefficients[4] %>% round(2)`, p < .001), smartphone use was more negatively associated with wellbeing for girls than for boys. 
