@@ -1,6 +1,6 @@
 ---
 title: "multiple regression"
-author: '2610922'
+author: 'Madeline Lui'
 date: "2/18/2022"
 output: html_document
 ---
