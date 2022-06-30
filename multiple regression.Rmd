@@ -1,5 +1,5 @@
 ---
-title: "multiple regression"
+title: "multiple regression: smartphone screen time in adolescents"
 author: 'Madeline Lui'
 date: "2/18/2022"
 output: html_document
@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r t1}
+```{r load}
 library(pwr)
 library(see)
 library(performance)
@@ -20,13 +20,13 @@ wellbeing <- read_csv("wellbeing.csv")
 screen <- read_csv("screen_time.csv")
 ```
 
-```{r t2}
+```{r summ}
 summary(is.na(pinfo))
 summary(is.na(wellbeing))
 summary(is.na(screen))
 ```
 
-```{r t3}
+```{r wellbeing t1}
 wemwbs <- wellbeing %>%
   pivot_longer(names_to="var", values_to="score", -Serial) %>%
   group_by(Serial) %>%
@@ -41,7 +41,7 @@ ggplot(wemwbs, aes(x=tot_wellbeing))+
   geom_histogram(colour="white", binwidth=3)
 ```
 
-```{r t4}
+```{r screen usage}
 screen_long <- screen %>%
   pivot_longer(names_to="var", values_to="hours", -Serial)%>%
   separate(var, c("variable", "day"), "_")
@@ -64,7 +64,7 @@ ggplot(dat_means, aes(x=hours, y=mean_wellbeing, linetype=day))+
   facet_wrap(~variable, nrow=2)
 ```
 
-```{r t5}
+```{r su2}
 smarttot <- screen2 %>%
   filter(variable=="Using Smartphone") %>%
   group_by(Serial) %>%
@@ -76,7 +76,7 @@ smart_wb <- smarttot %>%
   inner_join(pinfo, by=c("Serial"))
 ```
 
-```{r t6}
+```{r su gender}
 smart_wb <- smarttot %>%
   filter(tothours>1)%>%
   inner_join(wemwbs, by=c("Serial"))%>%
@@ -87,7 +87,7 @@ smart_wb <- smarttot %>%
   male=as.factor(male))
 ```
 
-```{r t7}
+```{r vis}
 smart_rel <- smart_wb %>%
   group_by(male, tothours) %>%
   summarise(mean_wellbeing=mean(tot_wellbeing))
@@ -100,13 +100,13 @@ ggplot(smart_rel, aes(x=tothours, y=mean_wellbeing, color=male))+
   scale_y_continuous(name="Mean well-being score")
 ```
 
-```{r t8}
+```{r mod}
 mod<- lm(tot_wellbeing ~ male_c * thours_c, smart_wb)
 mod_summary <- summary(mod)
 mod_summary
 ```
 
-```{r t9}
+```{r mod2}
 assumptions <- check_model(mod, check = c("vif", "qq", "normality", "linearity", "homogeneity"))
 assumptions
 
@@ -131,12 +131,12 @@ check_homogeneity(mod)
 check_collinearity(mod)
 ```
 
-```{r t10}
+```{r pwr t}
 pwr.f2.test(u = 3, v = 71029, f2 = NULL, sig.level = .05, power = .99)
 f2 <- mod_summary$adj.r.squared/(1 - mod_summary$adj.r.squared)
 ```
 
-```{r t11}
+```{r pred mod}
 newdata <- tibble(male_c="-0.5", thours_c=4)
 
 predict(mod, newdata)
